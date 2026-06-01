@@ -273,6 +273,78 @@ docs/      landing page (index.html) + preview clips
 All user data lives in `data/` (gitignored): `app.db` (sessions, messages, documents),
 `memory.json`, `presets.json`, `uploads/`, `personal_docs/`, `chroma/`, `settings.json`.
 
+## Backup and restore
+
+Odysseus has **two different backup flows**:
+
+### 1) Export / Import Data (UI / JSON)
+
+The **Settings → System → Data Backup** card exports a JSON file with user-level app data:
+
+- memories
+- presets
+- skills
+- settings
+- feature flags
+- preferences
+
+Use this when you want to:
+
+- move your configuration to another Odysseus install
+- keep a lightweight backup of app state
+- merge exported data back into an existing install
+
+This is **not** a full `data/` snapshot. It does **not** replace backing up the SQLite DB,
+uploads, Chroma data, personal docs, attachments, or other files under `data/`.
+
+### 2) Full `data/` snapshot (`scripts/odysseus-backup`)
+
+For full recovery or server migration, use the bundled backup helper:
+
+```bash
+python scripts/odysseus-backup snapshot
+python scripts/odysseus-backup list
+python scripts/odysseus-backup verify backups/odysseus-backup-YYYYMMDD-HHMMSS.tar.gz
+python scripts/odysseus-backup restore backups/odysseus-backup-YYYYMMDD-HHMMSS.tar.gz --yes
+```
+
+What it does:
+
+- snapshots the whole `data/` directory into a `.tar.gz`
+- uses SQLite's backup API for `.db` files so a running app can still be backed up safely
+- verifies tarball integrity without extracting via `verify`
+- refuses restore tarballs with absolute paths / parent traversal entries
+
+Default snapshot behavior:
+
+- includes the main app state under `data/`
+- skips `data/deep_research/` unless you pass `--include-research`
+- skips `data/mail-attachments/` unless you pass `--include-attachments`
+
+Examples:
+
+```bash
+# Standard snapshot into ./backups/
+python scripts/odysseus-backup snapshot
+
+# Write to a custom location
+python scripts/odysseus-backup snapshot --out /mnt/nas/odysseus-backup.tgz
+
+# Include larger optional directories
+python scripts/odysseus-backup snapshot --include-research --include-attachments
+```
+
+### Which one should I use?
+
+- Use **Export Data** for app-level config/state portability.
+- Use **`odysseus-backup snapshot`** for disaster recovery, machine migration, or full rollback.
+
+### Restore safety notes
+
+- `restore` is destructive and requires `--yes`.
+- The current `data/` directory is stashed aside before extraction.
+- Test `verify` on a backup archive before trusting it as your only copy.
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=pewdiepie-archdaemon%2Fodysseus&type=date&legend=top-left">
