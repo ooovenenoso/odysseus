@@ -54,6 +54,21 @@ Use that for the first login, then change it in **Settings**.
 Contributing? See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, and
 pull request guidelines.
 
+### System requirements
+
+These are practical starting points, not hard limits:
+
+- **Core app only** (chat, agent, memory, documents, email, calendar): 2 vCPU,
+  4 GB RAM, and ~10 GB free disk is enough for a light personal install.
+- **Recommended self-host / VPS**: 4 vCPU, 8 GB RAM, SSD storage, and extra disk
+  if you plan to keep uploads, embeddings, logs, or backups around.
+- **Cookbook downloads / local serving**: expect noticeably higher CPU, RAM, and
+  disk usage depending on the model. GPU is optional for the core app, but local
+  vLLM/SGLang serving is meant for Linux/WSL2 with compatible NVIDIA/AMD GPU
+  support.
+- **No local GPU?** Odysseus still works fine with API providers or a remote
+  Ollama / vLLM / llama.cpp endpoint.
+
 ### Docker (recommended)
 ```bash
 git clone https://github.com/pewdiepie-archdaemon/odysseus.git
