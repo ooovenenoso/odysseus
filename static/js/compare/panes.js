@@ -1,5 +1,5 @@
 // compare/panes.js — pane lifecycle, actions, layout
-import state from './state.js';
+import state, { compareSessionName } from './state.js';
 import { _persistSelections } from './models.js';
 import { buildVoteBar } from './vote.js';
 import {
@@ -382,7 +382,7 @@ async function _createAndAppendPane(m) {
 
   // Create session
   const fd = new FormData();
-  fd.append('name', '[CMP] ' + m.name);
+  fd.append('name', compareSessionName(m.name, i, state._blindMode, state._parallel));
   fd.append('endpoint_url', m.url || '');
   fd.append('model', m.id || '');
   if (m.endpointId) {
@@ -584,7 +584,7 @@ function _showModelSwapDropdown(paneIdx, titleBtn) {
         fetch(`${state.API_BASE}/api/session/${oldSid}`, { method: 'DELETE' }).catch(() => {});
       }
       const fd = new FormData();
-      fd.append('name', '[CMP] ' + m.name);
+      fd.append('name', compareSessionName(m.name, paneIdx, state._blindMode, state._parallel));
       fd.append('endpoint_url', m.url || '');
       fd.append('model', m.id || '');
       if (m.endpointId) {

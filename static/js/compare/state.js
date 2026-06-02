@@ -35,6 +35,16 @@ const state = {
                                    // stream.js reads this and stamps ✓/✗ per pane
 };
 
+/**
+ * Return the compare-session title persisted in the sidebar/session list.
+ * In blind mode we keep the same neutral Model A / Model 1 labels used in the
+ * pane UI so the sidebar cannot leak the real model before a vote.
+ */
+export function compareSessionName(displayName, slotIndex, blindMode, parallelMode = true) {
+  const slotLabel = parallelMode ? String.fromCharCode(65 + slotIndex) : String(slotIndex + 1);
+  return blindMode ? `[CMP] Model ${slotLabel}` : `[CMP] ${displayName}`;
+}
+
 /** Reset transient state to defaults — useful for clean restarts. */
 export function reset() {
   state._openingSelector = false;

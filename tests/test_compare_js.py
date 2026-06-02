@@ -179,3 +179,22 @@ def test_storage_keys_are_namespaced(node_available):
     out = _run_node(script)
     assert out["votes"].startswith("odysseus-")
     assert out["pool"].startswith("odysseus-")
+
+
+def test_compare_session_name_uses_blind_slot_labels(node_available):
+    """Blind compare helper sessions must use neutral labels so the sidebar/API
+    cannot reveal real model names before a vote."""
+    script = textwrap.dedent("""
+        const { compareSessionName } = await import('./static/js/compare/state.js');
+        console.log(JSON.stringify({
+          blind_parallel: compareSessionName('gpt-4o', 0, true, true),
+          blind_sequential: compareSessionName('llama-3.1-70b', 1, true, false),
+          visible_name: compareSessionName('claude-sonnet-4', 2, false, true),
+        }));
+    """)
+    out = _run_node(script)
+    assert out == {
+        "blind_parallel": "[CMP] Model A",
+        "blind_sequential": "[CMP] Model 2",
+        "visible_name": "[CMP] claude-sonnet-4",
+    }

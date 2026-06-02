@@ -10,7 +10,7 @@
  */
 
 // ── Submodule imports ──
-import state from './state.js';
+import state, { compareSessionName } from './state.js';
 import { EVAL_PROMPTS, WAVE_FRAMES,
   ICON_DICE, ICON_EXPAND, ICON_COLLAPSE, ICON_CLOSE,
   ICON_REROLL, ICON_COPY, ICON_PLAY, ICON_CODE,
@@ -210,7 +210,7 @@ async function _buildCompareUI() {
     for (let i = 0; i < n; i++) {
       const m = state._selectedModels[i];
       const fd = new FormData();
-      fd.append('name', '[CMP] ' + modelShorts[i]);
+      fd.append('name', compareSessionName(modelShorts[i], i, state._blindMode, state._parallel));
       fd.append('endpoint_url', m.endpoint || '');
       fd.append('model', m.model || '');
       if (m.endpointId) {

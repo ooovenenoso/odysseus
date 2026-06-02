@@ -106,6 +106,17 @@ def _persist_session_headers(session_id: str, headers: dict | None) -> None:
         db.close()
 
 
+def _is_blind_compare_session_name(name: str) -> bool:
+    if not isinstance(name, str):
+        return False
+    return re.match(r"^\[CMP\] Model [A-Z0-9]+$", name.strip()) is not None
+
+
+def _public_session_model(name: str, model: str) -> str:
+    """Hide model IDs for active blind compare helper sessions."""
+    return "" if _is_blind_compare_session_name(name) else model
+
+
 def _pick_endpoint_for_sort(owner=None):
     """Pick model endpoint for auto-sort LLM call — uses utility endpoint setting, falls back to default."""
     from src.endpoint_resolver import resolve_endpoint
@@ -215,7 +226,7 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
         finally:
             db.close()
 
-        sessions = [{"id": s.id, "name": s.name, "model": s.model,
+        sessions = [{"id": s.id, "name": s.name, "model": _public_session_model(s.name, s.model),
                      "endpoint_url": s.endpoint_url, "rag": s.rag,
                      "archived": s.archived, "folder": folder_map.get(s.id),
                      "total_tokens": token_map.get(s.id, 0),

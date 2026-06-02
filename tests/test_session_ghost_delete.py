@@ -114,6 +114,16 @@ def test_unauthenticated_still_403(monkeypatch):
     assert exc.value.status_code == 403
 
 
+def test_public_session_model_redacts_blind_compare_helper_sessions():
+    assert SR._public_session_model("[CMP] Model A", "gpt-4o") == ""
+    assert SR._public_session_model("[CMP] Model 2", "llama-3.1-70b") == ""
+
+
+def test_public_session_model_keeps_non_blind_or_saved_session_names():
+    assert SR._public_session_model("[CMP] gpt-4o", "gpt-4o") == "gpt-4o"
+    assert SR._public_session_model("Regular chat", "claude-sonnet-4") == "claude-sonnet-4"
+
+
 # --- manager layer: delete_session clears memory-only ghosts ---------------
 
 def test_manager_deletes_memory_only_ghost(monkeypatch):
