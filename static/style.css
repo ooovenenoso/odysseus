@@ -12200,11 +12200,10 @@ mark.doc-find-mark.current {
      area — caret stays right, but typed text appears on a different row
      than the caret. */
   scrollbar-gutter: stable;
-  /* The highlight overlay hides its scrollbar, so the textarea must too —
-     otherwise the scrollbar shrinks the textarea's text-area width and
-     wraps lines earlier than the overlay, putting the caret on the wrong
-     line entirely. */
-  scrollbar-width: none;
+  /* Keep the reserved gutter so the textarea and highlight overlay wrap at
+     the same width, but allow a real scrollbar thumb so long docs can be
+     dragged directly instead of only mouse-wheel / PgUp / PgDn scrolling. */
+  scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
   tab-size: 4;
   white-space: pre-wrap;
@@ -12222,7 +12221,9 @@ mark.doc-find-mark.current {
   font-kerning: none !important;
   text-rendering: geometricPrecision !important;
 }
-.doc-editor-textarea::-webkit-scrollbar { display: none; }
+.doc-editor-textarea::-webkit-scrollbar {
+  width: 10px;
+}
 .doc-editor-textarea:hover,
 .doc-editor-textarea:focus,
 .doc-editor-textarea:active {
