@@ -169,6 +169,10 @@ do not run on macOS. MLX-only models are not served by Odysseus.
 
 ### Native Windows
 
+**Docker update helper:** if you run Odysseus with Docker on Windows, double-click
+`update-windows.bat` from the repo root to `git pull`, rebuild containers, and
+prune dangling images.
+
 **One-command launcher** (creates the venv, installs deps, runs setup, starts the
 server; safe to re-run):
 
