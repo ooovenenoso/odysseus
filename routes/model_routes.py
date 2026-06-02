@@ -1,14 +1,16 @@
 # routes/model_routes.py
 """Routes for model and provider management."""
+import os
 import re
 import uuid
 import json
+import socket
 import time as _time
 import logging
 import httpx
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 from fastapi import APIRouter, HTTPException, Form, Query, Body, Request
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
@@ -25,6 +27,52 @@ from src.endpoint_resolver import (
 from src.auth_helpers import _auth_disabled, owner_filter
 
 logger = logging.getLogger(__name__)
+
+
+# Loopback hosts a user might type for a local model server (LM Studio,
+# llama.cpp, vLLM, …). Inside Docker these point at the *container*, not the
+# host the server actually runs on.
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+
+
+def _docker_host_gateway_reachable() -> bool:
+    """True when we run inside a container whose host is reachable via
+    ``host.docker.internal`` (compose maps it to ``host-gateway``). Returns
+    False on native installs and on container setups without the mapping, so
+    the loopback rewrite below stays a no-op there."""
+    in_container = os.path.exists("/.dockerenv")
+    if not in_container:
+        try:
+            with open("/proc/1/cgroup", encoding="utf-8") as fh:
+                in_container = any(t in fh.read() for t in ("docker", "containerd", "kubepods"))
+        except OSError:
+            in_container = False
+    if not in_container:
+        return False
+    try:
+        socket.getaddrinfo("host.docker.internal", None)
+        return True
+    except OSError:
+        return False
+
+
+def _rewrite_loopback_for_docker(base_url: str) -> str:
+    """Rewrite a loopback model-endpoint URL to ``host.docker.internal`` when
+    running in Docker. A URL like ``http://localhost:1234/v1`` (the LM Studio
+    default) otherwise targets the Odysseus container itself, so the probe gets
+    a connection error and the endpoint is rejected with a misleading "No
+    models found for that provider/key". The Ollama paths already handle this;
+    this extends the same fix to OpenAI-compatible local servers."""
+    try:
+        parsed = urlparse(base_url)
+    except Exception:
+        return base_url
+    if (parsed.hostname or "").lower() not in _LOOPBACK_HOSTS:
+        return base_url
+    if not _docker_host_gateway_reachable():
+        return base_url
+    netloc = "host.docker.internal" + (f":{parsed.port}" if parsed.port else "")
+    return urlunparse(parsed._replace(netloc=netloc))
 
 
 # ── Curated model lists per provider ──
@@ -348,7 +396,24 @@ def _ping_endpoint(base_url: str, api_key: str = None, timeout: float = 1.5) -> 
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
+    # Ollama exposes /v1/models (OpenAI-compatible) AND native /api/version,
+    # /api/tags. The OpenAI-style GET base + "/models" returns 404 when the
+    # base is the host root or the native /api root (e.g. http://localhost:11434,
+    # http://localhost:11434/api) because /models lives under /v1 there. Treat
+    # 4xx on a port-11434 / Ollama-named base as "try the native paths" rather
+    # than as a definitive offline verdict — Ollama is reachable, it just
+    # doesn't speak OpenAI on that prefix. Without this gate the quickstart
+    # marks an alive Ollama as offline whenever cached_models is empty (issue
+    # #1025): _probe_endpoint() falls through to /api/tags on the same 404, but
+    # _ping_endpoint() was returning before that fallback could run.
+    parsed_base = urlparse(base)
+    looks_like_ollama = (
+        parsed_base.port == 11434
+        or "ollama" in (parsed_base.hostname or "").lower()
+    )
+
     url = base + "/models"
+    last_error: Optional[str] = None
     try:
         r = httpx.get(url, headers=headers, timeout=timeout)
         if 300 <= r.status_code < 400:
@@ -360,17 +425,21 @@ def _ping_endpoint(base_url: str, api_key: str = None, timeout: float = 1.5) -> 
                     "error": "That is Odysseus, not a model server. Use the Ollama URL, usually http://host.docker.internal:11434/v1 in Docker.",
                 }
             return {"reachable": False, "status_code": r.status_code, "error": f"HTTP {r.status_code} redirect"}
-        if r.status_code < 500:
-            return {"reachable": r.status_code < 400, "status_code": r.status_code, "error": None if r.status_code < 400 else f"HTTP {r.status_code}"}
+        if r.status_code < 400:
+            return {"reachable": True, "status_code": r.status_code, "error": None}
+        if r.status_code < 500 and not looks_like_ollama:
+            return {"reachable": False, "status_code": r.status_code, "error": f"HTTP {r.status_code}"}
+        last_error = f"HTTP {r.status_code}"
     except Exception as e:
         last_error = str(e)[:120]
-    else:
-        last_error = f"HTTP {r.status_code}"
 
     try:
-        parsed = urlparse(base)
-        if parsed.port == 11434 or "ollama" in (parsed.hostname or "").lower():
-            root = base[:-3].rstrip("/") if base.endswith("/v1") else base
+        if looks_like_ollama:
+            root = base
+            for suffix in ("/v1", "/api"):
+                if root.endswith(suffix):
+                    root = root[: -len(suffix)].rstrip("/")
+                    break
             for path in ("/api/version", "/api/tags"):
                 try:
                     r = httpx.get(root + path, timeout=timeout)
@@ -408,6 +477,15 @@ def _model_endpoint_error_message(base_url: str, ping: Dict[str, Any] = None) ->
         return f"No models found for that provider/key. Last probe error: {error}."
 
     return "No models found for that provider/key."
+
+
+def _visible_models(cached_models, hidden_models):
+    """Filter cached model IDs by hidden_models. Returns list of visible IDs."""
+    all_models = json.loads(cached_models) if isinstance(cached_models, str) else (cached_models or [])
+    if not hidden_models:
+        return all_models
+    hidden = set(json.loads(hidden_models) if isinstance(hidden_models, str) else (hidden_models or []))
+    return [m for m in all_models if m not in hidden]
 
 
 def setup_model_routes(model_discovery):
@@ -938,6 +1016,9 @@ def setup_model_routes(model_discovery):
         # Resolve hostname via Tailscale if DNS fails
         from src.endpoint_resolver import resolve_url
         base_url = resolve_url(base_url)
+        # In Docker, rewrite a loopback URL to host.docker.internal so the probe
+        # — and the saved URL used for chat — reach the host, not the container.
+        base_url = _rewrite_loopback_for_docker(base_url)
 
         # Auto-generate name from URL if not provided
         if not name.strip():
@@ -1046,6 +1127,7 @@ def setup_model_routes(model_discovery):
             raise HTTPException(400, "Base URL is required")
         from src.endpoint_resolver import resolve_url
         base_url = resolve_url(base_url)
+        base_url = _rewrite_loopback_for_docker(base_url)
         probe_timeout = 3 if (":11434" in base_url or "ollama" in base_url.lower()) else 2
         models = _probe_endpoint(base_url, api_key.strip() or None, timeout=probe_timeout)
         ping = {"reachable": True, "error": None} if models else _ping_endpoint(base_url, api_key.strip() or None, timeout=probe_timeout)
@@ -1258,9 +1340,9 @@ def setup_model_routes(model_discovery):
             chat_url = build_chat_url(base)
             if not model and getattr(ep, "cached_models", None):
                 try:
-                    models = _json.loads(ep.cached_models) if isinstance(ep.cached_models, str) else ep.cached_models
-                    if models:
-                        model = models[0]
+                    visible = _visible_models(ep.cached_models, getattr(ep, "hidden_models", None))
+                    if visible:
+                        model = visible[0]
                 except Exception:
                     pass
             return {"endpoint_id": ep.id, "endpoint_url": chat_url, "model": model}
