@@ -89,7 +89,7 @@ module.exports = async ({ github, context, core }) => {
         WELCOME_MARKER,
         'Thanks for opening a PR!',
         '',
-        'Please read our [contribution guide](https://github.com/pewdiepie-archdaemon/odysseus/blob/main/CONTRIBUTING.md#pull-requests), and please adhere to the [pull request template](https://github.com/pewdiepie-archdaemon/odysseus/blob/main/.github/pull_request_template.md).',
+        'Please first check if a similar PR already exists(open or closed). Then, find(or create) an issue for your PR. Read our [contribution guide](https://github.com/pewdiepie-archdaemon/odysseus/blob/main/CONTRIBUTING.md#pull-requests), and please adhere to the [pull request template](https://github.com/pewdiepie-archdaemon/odysseus/blob/main/.github/pull_request_template.md).',
         '',
         'Thanks in advance!',
       ].join('\n'),
