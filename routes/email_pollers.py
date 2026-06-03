@@ -45,6 +45,29 @@ from routes.email_helpers import (
 logger = logging.getLogger(__name__)
 
 
+def _record_calendar_extraction(message_id: str, uid, events_created: int, existing: set[str]) -> None:
+    """Mark an email's calendar extraction as completed.
+
+    This is intentionally called only after the extraction LLM call returns.
+    Transient LLM failures must leave the message unmarked so the next poll can
+    retry instead of permanently skipping calendar extraction.
+    """
+    try:
+        import sqlite3 as _sql3
+        _cc = _sql3.connect(SCHEDULED_DB)
+        _cc.execute(
+            "INSERT OR REPLACE INTO email_calendar_extractions "
+            "(message_id, uid, events_created, created_at) VALUES (?, ?, ?, ?)",
+            (message_id, uid.decode() if isinstance(uid, bytes) else str(uid),
+             events_created, datetime.utcnow().isoformat())
+        )
+        _cc.commit()
+        _cc.close()
+        existing.add(message_id)
+    except Exception as ce:
+        logger.debug(f"Could not cache calendar extraction: {ce}")
+
+
 def _owner_for_email_account(account_id: str | None) -> str:
     if not account_id:
         return ""
@@ -670,20 +693,11 @@ async def _auto_summarize_pass_single(days_back: int = 1, account_id: str | None
                                 logger.warning(f"[cal-extract] JSON parse failed: {je} on raw={cal_extract[:200]!r}")
                     except Exception as e:
                         logger.warning(f"[cal-extract] Meeting extraction LLM call failed for uid={uid}: {e}")
-                    # Record we processed this email so we don't re-LLM next run
-                    try:
-                        _cc = _sql3.connect(SCHEDULED_DB)
-                        _cc.execute(
-                            "INSERT OR REPLACE INTO email_calendar_extractions "
-                            "(message_id, uid, events_created, created_at) VALUES (?, ?, ?, ?)",
-                            (message_id, uid.decode() if isinstance(uid, bytes) else str(uid),
-                             _cal_run_count, datetime.utcnow().isoformat())
-                        )
-                        _cc.commit()
-                        _cc.close()
-                        _cal_existing.add(message_id)
-                    except Exception as ce:
-                        logger.debug(f"Could not cache calendar extraction: {ce}")
+                    else:
+                        # Record only after the extraction LLM call has returned.
+                        # If it failed transiently, leave the message unmarked so
+                        # a later poll can retry calendar extraction.
+                        _record_calendar_extraction(message_id, uid, _cal_run_count, _cal_existing)
 
                 if need_urgent:
                     try:
