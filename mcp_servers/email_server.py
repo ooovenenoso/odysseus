@@ -961,10 +961,11 @@ def _bulk_move(uids, source_folder, dest_folder, account=None, role: str = ""):
         if not existing:
             return 0
         moved = len(existing)
-        status, _ = conn.uid("MOVE", _b(msg_set), dest_folder)
+        dest_arg = _q(dest_folder)
+        status, _ = conn.uid("MOVE", _b(msg_set), dest_arg)
         if status != "OK":
             # Fallback: UID copy + flag-delete + expunge
-            status, _ = conn.uid("COPY", _b(msg_set), dest_folder)
+            status, _ = conn.uid("COPY", _b(msg_set), dest_arg)
             if status != "OK":
                 return 0
             status, _ = conn.uid("STORE", _b(msg_set), "+FLAGS", "\\Deleted")
@@ -1003,11 +1004,12 @@ def _move_message(uid, source_folder, dest_folder, account=None, role: str = "")
         existing = _uid_fetch_rows(data)
         if status != "OK" or not existing:
             return False
-        status, _ = conn.uid("MOVE", _b(uid), dest_folder)
+        dest_arg = _q(dest_folder)
+        status, _ = conn.uid("MOVE", _b(uid), dest_arg)
         if status == "OK":
             return True
         # Fallback: UID copy + delete
-        status, _ = conn.uid("COPY", _b(uid), dest_folder)
+        status, _ = conn.uid("COPY", _b(uid), dest_arg)
         if status != "OK":
             return False
         status, _ = conn.uid("STORE", _b(uid), "+FLAGS", "\\Deleted")
