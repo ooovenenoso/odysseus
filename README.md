@@ -71,6 +71,39 @@ binds the web UI to `127.0.0.1` by default. If the port is taken, set
 `APP_PORT=7001` in `.env` and recreate the container. Set `APP_BIND=0.0.0.0`
 only when you intentionally want LAN/reverse-proxy access.
 
+#### Agent workspaces with Docker
+
+The agent workspace picker browses folders visible to the Odysseus server. In a
+Docker install, that means the container filesystem, not every folder on your
+host. To let the agent work inside a host project, bind-mount that project into
+the `odysseus` service and then select the mounted container path in the app.
+
+For example, mount a host repository at `/workspace/project`:
+
+```yaml
+services:
+  odysseus:
+    volumes:
+      - /host/path/to/project:/workspace/project
+```
+
+Then choose `/workspace/project` in the workspace picker. For read-only review
+or audit sessions, make the mount read-only:
+
+```yaml
+services:
+  odysseus:
+    volumes:
+      - /host/path/to/project:/workspace/project:ro
+```
+
+Use a read-write mount only when you want agent file tools to edit the project.
+On SELinux systems, Docker may also need a label option such as `:z`, depending
+on your host policy. Selecting a workspace confines the agent file/code tools to
+that folder; standalone shell terminals and setup scripts may still start from
+the server user's home directory unless they explicitly `cd` into the mounted
+path.
+
 ### Native Linux / macOS
 ```bash
 git clone https://github.com/pewdiepie-archdaemon/odysseus.git
