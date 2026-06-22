@@ -296,6 +296,23 @@ Local GPU *serving* of vLLM/SGLang needs Linux/WSL2; for a local model on Window
 Open `http://localhost:7000`, log in with the generated admin password,
 and configure everything else inside **Settings**.
 
+#### Windows storage configuration
+
+On a native Windows install, Hugging Face model files default to
+`C:\Users\<you>\.cache\huggingface\hub` (the system drive). Multi-gigabyte
+GGUF files can fill C: quickly, so redirect the cache to another drive
+*before* the first Cookbook download:
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("HF_HOME", "D:\huggingface", "Machine")
+```
+
+Restart the Odysseus server (or the launch-windows.ps1 process) after
+changing the variable so the new path is picked up. `HF_HOME` is the
+recommended knob; `HUGGINGFACE_HUB_CACHE` is the lower-level override and
+also works. Docker users do not need either — `./data/huggingface` is the
+default Docker bind mount.
+
 ## Troubleshooting & Advanced Setup
 
 ### `chromadb-client` conflicts with embedded ChromaDB
